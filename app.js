@@ -63,18 +63,22 @@ client.on(Events.InteractionCreate, async interaction => {
 	if (!interaction.isAnySelectMenu()) return;
 	if (interaction.customId === 'selected_users') {
 
-		let voiceChannel = interaction.member.voice.channel;
-		if (voiceChannel === null) {
-			await interaction.reply({ content: 'You must be in a voice channel to send invites!', flags: MessageFlags.Ephemeral });
+		try {
+			const voiceChannel = interaction.member.voice.channel;
+			if (voiceChannel === null) {
+				await interaction.reply({ content: 'You must be in a voice channel to send invites!', flags: MessageFlags.Ephemeral });
+				return;
+			}
+		} catch (error) {
+			console.error('Error fetching voice channel:', error);
+			await interaction.reply({ content: 'Probably doesn\'t have permissions.\nBeg admins then try again.', flags: MessageFlags.Ephemeral });
 			return;
 		}
-
-		const selectedUsers = interaction.values;
-		
+			
 		try
 		{	
 			const modal = new ModalBuilder()
-				.setCustomId(`invite_modal|${selectedUsers}`)
+				.setCustomId(`invite_modal|${interaction.values}`)
 				.setTitle("Message to send")
 
 			const titleInput = new TextInputBuilder()

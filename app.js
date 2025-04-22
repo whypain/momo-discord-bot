@@ -1,65 +1,152 @@
-import 'dotenv/config';
-import express from 'express';
-import {
-  ButtonStyleTypes,
-  InteractionResponseFlags,
-  InteractionResponseType,
-  InteractionType,
-  MessageComponentTypes,
-  verifyKeyMiddleware,
-} from 'discord-interactions';
-import { getRandomEmoji, DiscordRequest } from './utils.js';
-import { getShuffledOptions, getResult } from './game.js';
+import { 
+	Client, 
+	Collection, 
+	Events, 
+	GatewayIntentBits, 
+	MessageFlags, 
+	EmbedBuilder ,
+	ButtonBuilder,
+	ButtonStyle,
+	ActionRowBuilder,
+	ModalBuilder,
+	TextInputBuilder,
+	TextInputStyle,
+} from 'discord.js';
 
-// Create an express app
-const app = express();
-// Get port, or default to 3000
-const PORT = process.env.PORT || 3000;
-// To keep track of our active games
-const activeGames = {};
+import { fileURLToPath } from 'url';
+import { assignCommands } from './util.js';
+import path from 'path'
+import dotenv from 'dotenv';
 
-/**
- * Interactions endpoint URL where Discord will send HTTP requests
- * Parse request body and verifies incoming requests using discord-interactions package
- */
-app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async function (req, res) {
-  // Interaction id, type and data
-  const { id, type, data } = req.body;
+dotenv.config();
 
-  /**
-   * Handle verification requests
-   */
-  if (type === InteractionType.PING) {
-    return res.send({ type: InteractionResponseType.PONG });
-  }
 
-  /**
-   * Handle slash command requests
-   * See https://discord.com/developers/docs/interactions/application-commands#slash-commands
-   */
-  if (type === InteractionType.APPLICATION_COMMAND) {
-    const { name } = data;
 
-    // "test" command
-    if (name === 'test') {
-      // Send a message into the channel where command was triggered from
-      return res.send({
-        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-        data: {
-          // Fetches a random emoji to send from a helper function
-          content: `hello world ${getRandomEmoji()}`,
-        },
-      });
-    }
 
-    console.error(`unknown command: ${name}`);
-    return res.status(400).json({ error: 'unknown command' });
-  }
-
-  console.error('unknown interaction type', type);
-  return res.status(400).json({ error: 'unknown interaction type' });
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+	GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.DirectMessages,
+    GatewayIntentBits.MessageContent,
+  ],
+  partials: ['CHANNEL'],
 });
 
-app.listen(PORT, () => {
-  console.log('Listening on port', PORT);
+client.commands = new Collection();
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const commandFolderPath = path.join(__dirname, 'commands');
+
+await assignCommands(client, commandFolderPath);
+
+
+
+
+client.once(Events.ClientReady, readyClient => {
+  console.log(`${readyClient.user.tag} Ready!`);
 });
+
+
+client.on(Events.InteractionCreate, async interaction => {
+  if (!interaction.isChatInputCommand()) return;
+  const command = client.commands.get(interaction.commandName);
+
+  if (command) command.execute(interaction).catch(console.error);
+  else console.log(`[WARNING] No command matching ${interaction.commandName} was found.`);
+})
+
+
+client.on(Events.InteractionCreate, async interaction => {
+	if (!interaction.isAnySelectMenu()) return;
+	if (interaction.customId === 'selected_users') {
+
+		let voiceChannel = interaction.member.voice.channel;
+		if (voiceChannel === null) {
+			await interaction.reply({ content: 'You must be in a voice channel to send invites!', flags: MessageFlags.Ephemeral });
+			return;
+		}
+
+		const selectedUsers = interaction.values;
+		
+		try
+		{	
+			const modal = new ModalBuilder()
+				.setCustomId(`invite_modal|${selectedUsers}`)
+				.setTitle("Message to send")
+
+			const titleInput = new TextInputBuilder()
+				.setCustomId("invite_title")
+				.setLabel("Title")
+				.setMinLength(1)
+				.setMaxLength(20)
+				.setValue(`Message from ${interaction.user.tag}!`)
+				.setStyle(TextInputStyle.Short);
+				
+			const descriptionInput = new TextInputBuilder()
+				.setCustomId("invite_description")
+				.setLabel("Description")
+				.setMinLength(1)
+				.setMaxLength(200)
+				.setValue("Hop on you filthy casuals.")
+				.setStyle(TextInputStyle.Paragraph);
+
+			const titleInputRow = new ActionRowBuilder().addComponents(titleInput);
+			const descriptionInputRow = new ActionRowBuilder().addComponents(descriptionInput);
+
+			modal.addComponents(titleInputRow, descriptionInputRow);
+
+			await interaction.showModal(modal);
+
+		} catch (error) {
+			console.error('Error sending DM:', error);
+			return;
+		}
+	}
+})
+
+client.on(Events.InteractionCreate, async interaction => {
+	if (!interaction.isModalSubmit()) return;
+	if (!interaction.customId.startsWith('invite_modal'))  return;
+	
+	const [ modalId, selectedUsers ] = interaction.customId.split('|');
+	
+	const selected_users = selectedUsers.split(',');
+	const title = interaction.fields.getTextInputValue('invite_title');
+	const description = interaction.fields.getTextInputValue('invite_description');
+
+	const userGlobal = await client.users.fetch(interaction.user.id, { force: true });
+	
+	try
+	{	
+		const joinButton = new ButtonBuilder()
+			.setLabel('Go to VC')
+			.setStyle(ButtonStyle.Link)
+			.setURL(`https://discord.com/channels/${interaction.guild.id}/${interaction.member.voice.channel.id}`)
+			.setEmoji('🔊');
+		
+		const embed = new EmbedBuilder()
+			.setTitle(title)
+			.setAuthor({ name: interaction.user.tag, iconURL: interaction.user.displayAvatarURL() })
+			.setThumbnail(interaction.guild.iconURL())
+			.setDescription(description)
+			.setColor(parseInt(userGlobal.accentColor.toString(16).padStart(6, '0'), 16));
+		
+		const buttonRow = new ActionRowBuilder().addComponents(joinButton);
+		
+		selected_users.map(async userId => {
+			const user = await interaction.guild.members.fetch(userId);
+			await user.send({ embeds: [embed], components: [buttonRow] });
+		});
+		
+		await interaction.reply({ content: 'DMs sent to selected users!', flags: MessageFlags.Ephemeral });
+	} catch (error) {
+		console.error('Error sending DM:', error);
+		return;
+	}
+	
+})
+
+client.login(process.env.DISCORD_TOKEN);

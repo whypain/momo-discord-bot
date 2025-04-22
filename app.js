@@ -15,6 +15,7 @@ import {
 
 import { fileURLToPath } from 'url';
 import { assignCommands } from './util.js';
+import express from 'express';
 import path from 'path'
 import dotenv from 'dotenv';
 
@@ -152,5 +153,11 @@ client.on(Events.InteractionCreate, async interaction => {
 	}
 	
 })
+
+const app = express();
+app.listen(process.env.PORT, () => {
+	console.log(`Server is running on port ${process.env.PORT}`);
+});
+
 
 client.login(process.env.DISCORD_TOKEN);

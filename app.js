@@ -75,18 +75,20 @@ client.on(Events.InteractionCreate, async interaction => {
 			await interaction.reply({ content: 'Probably doesn\'t have permissions.\nBeg admins then try again.', flags: MessageFlags.Ephemeral });
 			return;
 		}
-			
+
+		const selectedUsers = interaction.values;
+
 		try
 		{	
 			const modal = new ModalBuilder()
-				.setCustomId(`invite_modal|${interaction.values}`)
+				.setCustomId(`invite_modal|${selectedUsers}`)
 				.setTitle("Message to send")
 
 			const titleInput = new TextInputBuilder()
 				.setCustomId("invite_title")
 				.setLabel("Title")
 				.setMinLength(1)
-				.setMaxLength(20)
+				.setMaxLength(40)
 				.setValue(`Message from ${interaction.user.tag}!`)
 				.setStyle(TextInputStyle.Short);
 				
@@ -106,7 +108,7 @@ client.on(Events.InteractionCreate, async interaction => {
 			await interaction.showModal(modal);
 
 		} catch (error) {
-			console.error('Error sending DM:', error);
+			console.error('Error showing modal:', error);
 			return;
 		}
 	}

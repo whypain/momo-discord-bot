@@ -157,6 +157,11 @@ client.on(Events.InteractionCreate, async interaction => {
 })
 
 const app = express();
+
+app.get('/', (req, res) => {
+	res.send('🤖 Bot is alive and kicking!');
+});
+
 app.listen(process.env.PORT, () => {
 	console.log(`Server is running on port ${process.env.PORT}`);
 });

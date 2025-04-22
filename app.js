@@ -71,7 +71,6 @@ client.on(Events.InteractionCreate, async interaction => {
 				return;
 			}
 		} catch (error) {
-			console.error('Error fetching voice channel:', error);
 			await interaction.reply({ content: 'Probably doesn\'t have permissions.\nBeg admins then try again.', flags: MessageFlags.Ephemeral });
 			return;
 		}
